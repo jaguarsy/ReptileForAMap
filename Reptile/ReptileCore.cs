@@ -1,4 +1,5 @@
-﻿using Reptile.Interface;
+﻿using Reptile.Entity;
+using Reptile.Interface;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -21,10 +22,12 @@ namespace Reptile
         //Http请求操作类
         private HttpHelper httpHelper = new HttpHelper();
 
+        private testEntities dbContext = new testEntities();
+
         //构造函数，传入目标地址
-        public ReptileCore(string url)
+        public ReptileCore()
         {
-            this.targetUrl = url;
+            this.targetUrl = "http://trp.autonavi.com/traffic/pages/310000.html";
         }
 
         //向爬虫类注册负责更新消息的watcher
@@ -69,6 +72,9 @@ namespace Reptile
                 {
                     watcher.Log("当前更新时间为：" + currentUpdateTime.ToString());
                     getData(html);
+                    watcher.Log("保存到数据库");
+                    save();
+                    watcher.Log("保存成功");
                 }
                 else
                 {
@@ -84,7 +90,7 @@ namespace Reptile
         {
             try
             {
-                //dbContext.SaveChanges();
+                dbContext.SaveChanges();
             }
             catch (Exception ex)
             {
@@ -97,11 +103,13 @@ namespace Reptile
         {
             DataTable result = new DataTable();
 
+            var current = getUpdateTime(html);
+
             int[] way = { 0, 30, 60 };
             int wayIndex, tmpIndex;
 
             //页面正则
-            regex = new Regex(@"td_road[\s\S]*?h3\>([^\<]+)[\s\S]*?span[^\>]+([^\<]+)[\s\S]*?center"">([^\<]+)[\s\S]*?center"">([^\<]+)[\s\S]*?center"">([^\<]+)");
+            regex = new Regex(@"td_road[\s\S]*?h3\>([^\<]+)[\s\S]*?span[^\>]+\>([^\<]+)[\s\S]*?center"">([^\<]+)[\s\S]*?center"">([^\<]+)[\s\S]*?center"">([^\<]+)");
             //获取所有匹配历史
             var matches = regex.Matches(html);
 
@@ -112,8 +120,19 @@ namespace Reptile
                 {
                     tmpIndex = wayIndex + j;
                     var match = matches[tmpIndex];
-                    watcher.Log((tmpIndex + 1) + ":" + match.Groups[1].Value + " " + match.Groups[3].Value + " " +
-                        match.Groups[4].Value + " " + match.Groups[5].Value + " " + match.Groups[6].Value);
+                    var model = new AMap();
+                    model.Name = match.Groups[1].Value;
+                    model.DelayIndex = decimal.Parse(match.Groups[2].Value.Trim());
+                    model.Speed = decimal.Parse(match.Groups[3].Value.Trim());
+                    model.TravelTime = decimal.Parse(match.Groups[4].Value.Trim());
+                    model.DelayTime = decimal.Parse(match.Groups[5].Value.Trim());
+                    model.Time = current.ToShortTimeString();
+                    model.Date = current.ToShortDateString();
+                    model.Type = i + 1;
+
+                    dbContext.AMap.Add(model);
+                    watcher.Log(model.Name + "," + model.DelayIndex + "," + model.Speed + "," + model.TravelTime + "," +
+                        model.DelayTime + "," + model.Time + "," + model.Date + "," + model.Type);
                 }
 
             }
